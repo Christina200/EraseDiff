@@ -207,3 +207,80 @@ def setup_nsfw_data(batch_size, forget_path, remain_path, image_size, interpolat
     return forget_dl, remain_dl
 
 
+class FeatureDataset(Dataset):
+
+    def __init__(self, img_dir, transform, image_key='jpg', txt_key='txt', feature=None, caption=None):
+        super().__init__()
+        self.img_dir = img_dir
+        self.all_imgs = glob.glob(os.path.join(self.img_dir, "*.png"))
+        self.feature = feature
+        if caption is None:
+            self.caption = f"a photo of a person with {self.feature}"
+        else:
+            self.caption = caption
+        self.captions = [item.strip() for item in self.caption.split(",")]
+        self.image_key = image_key
+        self.txt_key = txt_key
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.all_imgs)
+
+    def __getitem__(self, idx):
+        img_name = self.all_imgs[idx]
+        image = Image.open(img_name)
+        text_cond = self.captions[0]
+        image = self.transform(image).permute(1, 2, 0)  # [HxWxC]
+
+        return {self.image_key: image, self.txt_key: text_cond}
+
+
+class NotFeatureDataset(Dataset):
+
+    def __init__(self, img_dir, transform, image_key='jpg', txt_key='txt', feature=None, caption=None):
+        super().__init__()
+        self.img_dir = img_dir
+        self.all_imgs = glob.glob(os.path.join(self.img_dir, "*.png"))
+        self.feature = feature
+        if caption is None:
+            self.caption = f"a photo of a person without {self.feature}"
+        else:
+            self.caption = caption
+        self.captions = [item.strip() for item in self.caption.split(",")]
+        self.image_key = image_key
+        self.txt_key = txt_key
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.all_imgs)
+
+    def __getitem__(self, idx):
+        img_name = self.all_imgs[idx]
+        image = Image.open(img_name)
+        text_cond = self.captions[0]
+        image = self.transform(image).permute(1, 2, 0)  # [HxWxC]
+
+        return {self.image_key: image, self.txt_key: text_cond}
+
+
+def setup_feature_data(batch_size, forget_path, retain_path, image_size, feature, positive_caption=None, negative_caption=None, interpolation="bicubic"):
+    interpolation = INTERPOLATIONS[interpolation]
+    transform = get_transform(interpolation, image_size)
+
+    forget_set = FeatureDataset(
+        img_dir=forget_path,
+        transform=transform,
+        feature=feature,
+        caption=positive_caption
+    )
+    forget_dl = DataLoader(forget_set, batch_size=batch_size)
+
+    retain_set = NotFeatureDataset(
+        img_dir=retain_path,
+        transform=transform,
+        feature=feature,
+        caption=negative_caption
+    )
+    retain_dl = DataLoader(retain_set, batch_size=batch_size)
+
+    return forget_dl, retain_dl
